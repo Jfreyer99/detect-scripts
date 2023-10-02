@@ -197,14 +197,16 @@ class CircleDetectorBuilder(object):
         sure_bg = self.img
         
         # Distance transform
-        dist = cv2.distanceTransform(self.img, cv2.DIST_L12, 0)
+        dist = cv2.distanceTransform(self.img, cv2.DIST_L2, 5)
         cv2.imshow('Distance Transform', dist)
         
         #foreground area
         dist = dist.astype(np.uint8)
+        
         #self.with_adaptive_threshold(31, self.C, maxValue=0.1 * dist.max())
         #ret, sure_fg = cv2.threshold(dist, 0.01 * dist.max(), 255, cv2.THRESH_BINARY)
-        ret, sure_fg = cv2.threshold(dist, 0.6 * dist.max(), 255, cv2.THRESH_OTSU | cv2.THRESH_BINARY)
+        
+        ret, sure_fg = cv2.threshold(dist, 0.6 * dist.max(), 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
         
         sure_fg = self.img.astype(np.uint8)  
         cv2.imshow('Sure Foreground', sure_fg)
@@ -215,7 +217,7 @@ class CircleDetectorBuilder(object):
         
         # Marker labelling
         # sure foreground 
-        ret, markers = cv2.connectedComponentsWithAlgorithm(sure_fg, connectivity=8, ltype=cv2.CV_32S, ccltype=cv2.CCL_BBDT)
+        ret, markers = cv2.connectedComponents(sure_fg)
         
         # Add one to all labels so that background is not 0, but 1
         markers += 1
@@ -254,7 +256,7 @@ class CircleDetectorBuilder(object):
         #img = cv2.drawContours(self.originalImage, tree, -1, color=(255, 255, 255), thickness=1)
         self.img = cv2.drawContours(self.originalImage.copy(), tree, -1, color=(255, 255, 255), thickness=cv2.FILLED)
         cv2.imshow("Contours",self.img)
-        
+                
         diff = cv2.subtract(cv2.cvtColor(self.img, cv2.COLOR_BGR2GRAY), cv2.cvtColor(self.originalImage, cv2.COLOR_BGR2GRAY))
         cv2.imshow("Difference",diff)
         self.img = diff
@@ -273,9 +275,9 @@ class CircleDetectorBuilder(object):
         params = cv2.SimpleBlobDetector_Params()
         
         # Set Area filtering parameters
-        params.filterByArea = True        
+        params.filterByArea = False        
         params.minArea = 10
-        
+                
         params.minThreshold = 0;
         params.maxThreshold = 255;
         
@@ -404,7 +406,7 @@ print(filename)
 # .with_watershed() \
 # .show()
 
-# cb = CircleDetectorBuilder(filename, True, 15) \
+# cb = CircleDetectorBuilder(filename, True, -15) \
 # .with_read_image() \
 # .with_resize_absolute(480, 320) \
 # .with_gaussian_blur(33, 33, kernelSize=(5,5)) \
@@ -412,23 +414,33 @@ print(filename)
 # .with_hue_shift() \
 # .with_adaptive_threshold(67, 0) \
 # .with_watershed() \
-# .with_dilation() \
-# .with_dilation() \
-# .with_dilation() \
 # .with_gaussian_blur(11, 11) \
 # .with_detect_blobs_MSER() \
 # .show()
 
-
-# Background
-cb = CircleDetectorBuilder(filename, True, -15) \
+cb = CircleDetectorBuilder(filename, True, 15) \
 .with_read_image() \
-.with_resize_absolute(420, 320) \
+.with_resize_absolute(480, 320) \
 .with_gaussian_blur(33, 33, kernelSize=(5,5)) \
 .with_pyr_mean_shift_filter(10,20, maxLevel=2) \
 .with_hue_shift() \
-.with_adaptive_threshold(67, 0) \
-.with_watershed()\
-.with_gaussian_blur(33, 33, kernelSize=(5,5)) \
+.with_adaptive_threshold(67,0) \
+.with_morphology(kernelX= 5, kernelY=5, operation=cv2.MORPH_ERODE) \
+.with_watershed() \
+.with_gaussian_blur(11, 11) \
 .with_detect_blobs_MSER() \
 .show()
+
+
+# Background
+# cb = CircleDetectorBuilder(filename, True, -15) \
+# .with_read_image() \
+# .with_resize_absolute(420, 320) \
+# .with_gaussian_blur(33, 33, kernelSize=(5,5)) \
+# .with_pyr_mean_shift_filter(10,20, maxLevel=2) \
+# .with_hue_shift() \
+# .with_adaptive_threshold(67, 0) \
+# .with_watershed()\
+# .with_gaussian_blur(33, 33, kernelSize=(5,5)) \
+# .with_detect_blobs_MSER() \
+# .show()
