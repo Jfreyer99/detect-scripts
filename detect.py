@@ -365,6 +365,11 @@ class CircleDetectorBuilder(object):
 
 if __name__ == "__main__":
     
+    
+    # Implement K-means-clustering for image segmentation (2 CLusters Polter, !Polter)
+    # Implement mean shift segmentation
+    # 
+    
     root = Tk()
     root.withdraw()
     filename = filedialog.askopenfilename(
@@ -376,13 +381,13 @@ if __name__ == "__main__":
     img = cv2.imread(filename)
     img = cv2.resize(img, (640, 480))
     
-    cv2.imshow("Normal Picture", img.copy())
+    #cv2.imshow("Normal Picture", img.copy())
     
     img_lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
-    cv2.imshow("LAB Picture", img_lab.copy())
+    #cv2.imshow("LAB Picture", img_lab.copy())
     
     img_filtered = cv2.pyrMeanShiftFiltering(img_lab, 5, 10, maxLevel=1)
-    cv2.imshow("PYR_MEAN_SHIFT Picture", img_filtered.copy())
+    #cv2.imshow("PYR_MEAN_SHIFT Picture", img_filtered.copy())
     
     # Apply step 2: Identify clusters
     threshold = 0.5
@@ -409,83 +414,83 @@ if __name__ == "__main__":
     cv2.destroyAllWindows()
 
 
-# Try out different threshold methods
-#.with_adaptive_threshold(51,15) C >= 0 when not much to none background C < 0 when Background in Image 15, -15 solid values
-# cb = CircleDetectorBuilder(filename, True) \
-# .with_read_image_unchanged() \
-# .with_resize_absolute(800, 640) \
-# .with_hue_shift() \
-# .with_gaussian_blur(kernelSize=(9,9)) \
-# .with_adaptive_threshold(51,-15) \
-# .with_morphology(operation=cv2.MORPH_CLOSE) \
-# .with_gaussian_blur(kernelSize=(15, 15)) \
-# .with_detect_circles(method=cv2.HOUGH_GRADIENT_ALT, param1=300, param2=0.7 ) \
-# .show()
+    # Try out different threshold methods
+    #.with_adaptive_threshold(51,15) C >= 0 when not much to none background C < 0 when Background in Image 15, -15 solid values
+    # cb = CircleDetectorBuilder(filename, True) \
+    # .with_read_image_unchanged() \
+    # .with_resize_absolute(800, 640) \
+    # .with_hue_shift() \
+    # .with_gaussian_blur(kernelSize=(9,9)) \
+    # .with_adaptive_threshold(51,-15) \
+    # .with_morphology(operation=cv2.MORPH_CLOSE) \
+    # .with_gaussian_blur(kernelSize=(15, 15)) \
+    # .with_detect_circles(method=cv2.HOUGH_GRADIENT_ALT, param1=300, param2=0.7 ) \
+    # .show()
 
 
-# Detect without Background
-# cb = CircleDetectorBuilder(filename, True) \
-# .with_read_image() \
-# .with_resize_absolute(480, 360) \
-# .with_pyr_mean_shift_filter() \
-# .with_hue_shift() \
-# .with_gaussian_blur(kernelSize=(5,5))\
-# .with_adaptive_threshold(67, 15) \
-# .with_morphology(operation=cv2.MORPH_OPEN, iterations=1) \
-# .with_watershed() \
-# .show()
+    # Detect without Background
+    # cb = CircleDetectorBuilder(filename, True) \
+    # .with_read_image() \
+    # .with_resize_absolute(480, 360) \
+    # .with_pyr_mean_shift_filter() \
+    # .with_hue_shift() \
+    # .with_gaussian_blur(kernelSize=(5,5))\
+    # .with_adaptive_threshold(67, 15) \
+    # .with_morphology(operation=cv2.MORPH_OPEN, iterations=1) \
+    # .with_watershed() \
+    # .show()
 
 
-#Detect with Background
-# cb = CircleDetectorBuilder(filename, True, -15) \
-# .with_read_image() \
-# .with_resize_absolute(480, 360) \
-# .with_bilateral_blur() \
-# .with_pyr_mean_shift_filter() \
-# .with_hue_shift() \
-# .with_adaptive_threshold(67, 0) \
-# .with_morphology(operation=cv2.MORPH_OPEN, iterations=4) \
-# .with_watershed() \
-# .show()
+    #Detect with Background
+    # cb = CircleDetectorBuilder(filename, True, -15) \
+    # .with_read_image() \
+    # .with_resize_absolute(480, 360) \
+    # .with_bilateral_blur() \
+    # .with_pyr_mean_shift_filter() \
+    # .with_hue_shift() \
+    # .with_adaptive_threshold(67, 0) \
+    # .with_morphology(operation=cv2.MORPH_OPEN, iterations=4) \
+    # .with_watershed() \
+    # .show()
 
 
-#Important
-# cb = CircleDetectorBuilder(filename, True, -15) \
-# .with_read_image() \
-# .with_resize_absolute(480, 320) \
-# .with_gaussian_blur(33, 33, kernelSize=(5,5)) \
-# .with_pyr_mean_shift_filter(10,20, maxLevel=1) \
-# .with_hue_shift() \
-# .with_adaptive_threshold(67, 0) \
-# .with_watershed() \
-# .with_gaussian_blur(11, 11) \
-# .with_detect_blobs_MSER() \
-# .show()
+    #Important
+    # cb = CircleDetectorBuilder(filename, True, -15) \
+    # .with_read_image() \
+    # .with_resize_absolute(480, 320) \
+    # .with_gaussian_blur(33, 33, kernelSize=(5,5)) \
+    # .with_pyr_mean_shift_filter(10,20, maxLevel=1) \
+    # .with_hue_shift() \
+    # .with_adaptive_threshold(67, 0) \
+    # .with_watershed() \
+    # .with_gaussian_blur(11, 11) \
+    # .with_detect_blobs_MSER() \
+    # .show()
 
-#Important
-# cb = CircleDetectorBuilder(filename, True, 15) \
-# .with_read_image() \
-# .with_resize_absolute(480, 320) \
-# .with_gaussian_blur(33, 33, kernelSize=(5,5)) \
-# .with_pyr_mean_shift_filter(10,32, maxLevel=1) \
-# .with_hue_shift() \
-# .with_adaptive_threshold(67,0) \
-# .with_morphology(kernelX= 5, kernelY=5, operation=cv2.MORPH_ERODE) \
-# .with_watershed() \
-# .with_gaussian_blur(11, 11) \
-# .with_detect_blobs_MSER() \
-# .show()
+    #Important
+    # cb = CircleDetectorBuilder(filename, True, 15) \
+    # .with_read_image() \
+    # .with_resize_absolute(480, 320) \
+    # .with_gaussian_blur(33, 33, kernelSize=(5,5)) \
+    # .with_pyr_mean_shift_filter(10,32, maxLevel=1) \
+    # .with_hue_shift() \
+    # .with_adaptive_threshold(67,0) \
+    # .with_morphology(kernelX= 5, kernelY=5, operation=cv2.MORPH_ERODE) \
+    # .with_watershed() \
+    # .with_gaussian_blur(11, 11) \
+    # .with_detect_blobs_MSER() \
+    # .show()
 
 
-# Background
-# cb = CircleDetectorBuilder(filename, True, -15) \
-# .with_read_image() \
-# .with_resize_absolute(420, 320) \
-# .with_gaussian_blur(33, 33, kernelSize=(5,5)) \
-# .with_pyr_mean_shift_filter(10,20, maxLevel=2) \
-# .with_hue_shift() \
-# .with_adaptive_threshold(67, 0) \
-# .with_watershed()\
-# .with_gaussian_blur(33, 33, kernelSize=(5,5)) \
-# .with_detect_blobs_MSER() \
-# .show()
+    # Background
+    # cb = CircleDetectorBuilder(filename, True, -15) \
+    # .with_read_image() \
+    # .with_resize_absolute(420, 320) \
+    # .with_gaussian_blur(33, 33, kernelSize=(5,5)) \
+    # .with_pyr_mean_shift_filter(10,20, maxLevel=2) \
+    # .with_hue_shift() \
+    # .with_adaptive_threshold(67, 0) \
+    # .with_watershed()\
+    # .with_gaussian_blur(33, 33, kernelSize=(5,5)) \
+    # .with_detect_blobs_MSER() \
+    # .show()

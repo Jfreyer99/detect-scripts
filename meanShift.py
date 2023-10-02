@@ -4,7 +4,8 @@ def euclidean_distance(x1, x2):
     return np.sqrt(np.sum((x1 - x2) ** 2))
 
 def identify_clusters(convergence_points, threshold=0.5):
-    num_points = convergence_points.shape[0]
+    num_points = convergence_points.flatten()
+    print(num_points.shape)
     labels = np.arange(num_points)
     for i in range(num_points):
         for j in range(i + 1, num_points):
