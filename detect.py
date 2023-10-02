@@ -147,7 +147,7 @@ class CircleDetectorBuilder(object):
         return self
     
     def with_bilateral_blur(self, d=15):
-        self.img = cv2.bilateralFilter(self.img, 15, 64, 64)
+        self.img = cv2.bilateralFilter(self.img, 3, 64, 64)
         cv2.imshow("bilatral blur", self.img.copy())
         return self
     
@@ -204,7 +204,7 @@ class CircleDetectorBuilder(object):
         dist = dist.astype(np.uint8)
         #self.with_adaptive_threshold(31, self.C, maxValue=0.1 * dist.max())
         #ret, sure_fg = cv2.threshold(dist, 0.01 * dist.max(), 255, cv2.THRESH_BINARY)
-        ret, sure_fg = cv2.threshold(dist, 0.9 * dist.max(), 255, cv2.THRESH_OTSU | cv2.THRESH_BINARY)
+        ret, sure_fg = cv2.threshold(dist, 0.6 * dist.max(), 255, cv2.THRESH_OTSU | cv2.THRESH_BINARY)
         
         sure_fg = self.img.astype(np.uint8)  
         cv2.imshow('Sure Foreground', sure_fg)
@@ -221,19 +221,18 @@ class CircleDetectorBuilder(object):
         markers += 1
         # mark the region of unknown with zero
         markers[unknown == 255] = 0
-        fig, ax = plt.subplots(figsize=(6, 6))
-        ax.imshow(markers, cmap="tab20b")
-        ax.axis('off')
-        plt.show()
+        # fig, ax = plt.subplots(figsize=(6, 6))
+        # ax.imshow(markers, cmap="tab20b")
+        # ax.axis('off')
+        # plt.show()
         
         # watershed Algorithm
         markers = cv2.watershed(self.originalImage, markers)
         
-        fig, ax = plt.subplots(figsize=(5, 5))
-        ax.imshow(markers, cmap="tab20b")
-        ax.axis('off')
-        plt.show()
-        
+        # fig, ax = plt.subplots(figsize=(5, 5))
+        # ax.imshow(markers, cmap="tab20b")
+        # ax.axis('off')
+        # plt.show()
         
         labels = np.unique(markers)
         
@@ -258,6 +257,7 @@ class CircleDetectorBuilder(object):
         
         diff = cv2.subtract(cv2.cvtColor(self.img, cv2.COLOR_BGR2GRAY), cv2.cvtColor(self.originalImage, cv2.COLOR_BGR2GRAY))
         cv2.imshow("Difference",diff)
+        self.img = diff
         
         return self
 
@@ -273,26 +273,32 @@ class CircleDetectorBuilder(object):
         params = cv2.SimpleBlobDetector_Params()
         
         # Set Area filtering parameters
-        params.filterByArea = True
-        params.minArea = 50
+        params.filterByArea = True        
+        params.minArea = 10
+        
+        params.minThreshold = 0;
+        params.maxThreshold = 255;
         
         # Set Circularity filtering parameters
         params.filterByCircularity = True 
-        params.minCircularity = 0.578
+        params.minCircularity = 0.1
         
         # Set Convexity filtering parameters
-        params.filterByConvexity = True
-        params.minConvexity = 0.3
+        params.filterByConvexity = False
+        params.minConvexity = 0.2
             
         # Set inertia filtering parameters
-        params.filterByInertia = True
+        params.filterByInertia = False
         params.minInertiaRatio = 0.2
         
         # Create a detector with the parameters
         detector = cv2.SimpleBlobDetector_create(params)
 
+        cv2.imshow("before detection", self.img)
         # Detect blobs
         keypoints = detector.detect(self.img)
+        
+        #print(keypoints)
 
         # Draw blobs on our image as red circles
         blank = np.zeros((1, 1)) 
@@ -398,27 +404,31 @@ print(filename)
 # .with_watershed() \
 # .show()
 
-#.with_resize_absolute(480, 360) \
+# cb = CircleDetectorBuilder(filename, True, 15) \
+# .with_read_image() \
+# .with_resize_absolute(480, 320) \
+# .with_gaussian_blur(33, 33, kernelSize=(5,5)) \
+# .with_pyr_mean_shift_filter(10,20, maxLevel=2) \
+# .with_hue_shift() \
+# .with_adaptive_threshold(67, 0) \
+# .with_watershed() \
+# .with_dilation() \
+# .with_dilation() \
+# .with_dilation() \
+# .with_gaussian_blur(11, 11) \
+# .with_detect_blobs_MSER() \
+# .show()
 
-cb = CircleDetectorBuilder(filename, True, 15) \
+
+# Background
+cb = CircleDetectorBuilder(filename, True, -15) \
 .with_read_image() \
-.with_resize_absolute(720, 480) \
+.with_resize_absolute(420, 320) \
 .with_gaussian_blur(33, 33, kernelSize=(5,5)) \
 .with_pyr_mean_shift_filter(10,20, maxLevel=2) \
 .with_hue_shift() \
 .with_adaptive_threshold(67, 0) \
-.with_watershed() \
+.with_watershed()\
+.with_gaussian_blur(33, 33, kernelSize=(5,5)) \
+.with_detect_blobs_MSER() \
 .show()
-
-
-
-#Detect small to medium with background
-# cb = CircleDetectorBuilder(filename, True) \
-# .with_read_image_unchanged() \
-# .with_resize_absolute(800, 640) \
-# .with_hue_shift() \
-# .with_gaussian_blur(kernelSize=(9,9)) \
-# .with_adaptive_threshold(51, -15) \
-# .with_gaussian_blur(kernelSize=(21,21)) \
-# .with_detect_blobs_MSER() \
-# .show()
