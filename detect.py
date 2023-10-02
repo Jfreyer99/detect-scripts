@@ -1,5 +1,6 @@
 from tkinter import filedialog
 import numpy as np
+import meanShift
 import cv2
 from matplotlib import pyplot as plt
 from IPython.display import Image, display
@@ -49,6 +50,11 @@ class CircleDetectorBuilder(object):
     def with_resize_relative(self, factor):
         self.originalImage = self.img.copy()
         return NotImplemented
+    
+    def with_histogram_equal(self):
+        self.img = cv2.equalizeHist(self.img)
+        self.push_image()
+        return self
     
     def with_hue_shift(self, amount=30):
         dimensions = self.img[0,0]
@@ -357,15 +363,51 @@ class CircleDetectorBuilder(object):
 
 
 
-root = Tk()
-root.withdraw()
-
-filename = filedialog.askopenfilename(
+if __name__ == "__main__":
+    
+    root = Tk()
+    root.withdraw()
+    filename = filedialog.askopenfilename(
     initialdir="./pictures", title="Choose an image",
     filetypes=[(
         "Images Files", ["*.png", "*.jpg", "*.jpeg", "*.bmp"])])
+    print(filename)
+    
+    img = cv2.imread(filename)
+    img = cv2.resize(img, (640, 480))
+    
+    cv2.imshow("Normal Picture", img.copy())
+    
+    img_lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+    cv2.imshow("LAB Picture", img_lab.copy())
+    
+    img_filtered = cv2.pyrMeanShiftFiltering(img_lab, 5, 10, maxLevel=1)
+    cv2.imshow("PYR_MEAN_SHIFT Picture", img_filtered.copy())
+    
+    # Apply step 2: Identify clusters
+    threshold = 0.5
+    labels = meanShift.mean_shift_segmentation(img_filtered, threshold)
+    print(len(labels))
+    # Convert labels to a unique set of integers for better visualization
+    unique_labels = np.unique(labels)
 
-print(filename)
+    # Create a blank canvas for painting the segments on the original image
+    segmented_image = np.zeros_like(img)
+
+    # Assign colors to each segment based on the cluster labels
+    for label in unique_labels:
+        # Generate a random color for each label
+        color = np.random.randint(0, 255, size=(3,))
+        # Create a mask for pixels belonging to the current label
+        mask = labels == label
+        # Paint the segmented_image with the color for this label
+        segmented_image[mask] = color
+
+    # Display the segmented image
+    cv2.imshow('Segmented Image', segmented_image)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
 
 # Try out different threshold methods
 #.with_adaptive_threshold(51,15) C >= 0 when not much to none background C < 0 when Background in Image 15, -15 solid values
@@ -406,11 +448,13 @@ print(filename)
 # .with_watershed() \
 # .show()
 
+
+#Important
 # cb = CircleDetectorBuilder(filename, True, -15) \
 # .with_read_image() \
 # .with_resize_absolute(480, 320) \
 # .with_gaussian_blur(33, 33, kernelSize=(5,5)) \
-# .with_pyr_mean_shift_filter(10,20, maxLevel=2) \
+# .with_pyr_mean_shift_filter(10,20, maxLevel=1) \
 # .with_hue_shift() \
 # .with_adaptive_threshold(67, 0) \
 # .with_watershed() \
@@ -418,18 +462,19 @@ print(filename)
 # .with_detect_blobs_MSER() \
 # .show()
 
-cb = CircleDetectorBuilder(filename, True, 15) \
-.with_read_image() \
-.with_resize_absolute(480, 320) \
-.with_gaussian_blur(33, 33, kernelSize=(5,5)) \
-.with_pyr_mean_shift_filter(10,20, maxLevel=2) \
-.with_hue_shift() \
-.with_adaptive_threshold(67,0) \
-.with_morphology(kernelX= 5, kernelY=5, operation=cv2.MORPH_ERODE) \
-.with_watershed() \
-.with_gaussian_blur(11, 11) \
-.with_detect_blobs_MSER() \
-.show()
+#Important
+# cb = CircleDetectorBuilder(filename, True, 15) \
+# .with_read_image() \
+# .with_resize_absolute(480, 320) \
+# .with_gaussian_blur(33, 33, kernelSize=(5,5)) \
+# .with_pyr_mean_shift_filter(10,32, maxLevel=1) \
+# .with_hue_shift() \
+# .with_adaptive_threshold(67,0) \
+# .with_morphology(kernelX= 5, kernelY=5, operation=cv2.MORPH_ERODE) \
+# .with_watershed() \
+# .with_gaussian_blur(11, 11) \
+# .with_detect_blobs_MSER() \
+# .show()
 
 
 # Background
