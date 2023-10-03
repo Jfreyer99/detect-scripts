@@ -1,9 +1,10 @@
 from tkinter import filedialog
 import numpy as np
-import meanShift
+from collections import defaultdict
 import cv2
 from matplotlib import pyplot as plt
 from IPython.display import Image, display
+from skimage.segmentation import quickshift, felzenszwalb, slic
 
 from tkinter import Tk
 from tkinter.filedialog import askopenfilename
@@ -360,16 +361,113 @@ class CircleDetectorBuilder(object):
         cv2.namedWindow('Final Image')
         cv2.moveWindow('Final Image', x, y+1200)
         cv2.imshow('Final Image', self.originalImage)
+        #dev
+        
+
+def k_means_segmentation(filename, K):
+    img = cv2.imread(filename)
+    img = cv2.resize(img, (640, 480))
+    cv2.imshow('original', img.copy())
+    img = cv2.GaussianBlur(img, (5,5), sigmaX=11, sigmaY=11)
+    img = cv2.pyrMeanShiftFiltering(img, 5, 10, maxLevel=1)
+    cv2.imshow('Mean Shift Filter',img.copy())
+    Z = img.reshape((-1,3))
+    # convert to np.float32
+    Z = np.float32(Z)
+    
+    # define criteria, number of clusters(K) and apply kmeans()
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 1, 20)
+    ret,label,center=cv2.kmeans(Z, K, None, criteria, 50, cv2.KMEANS_PP_CENTERS)
+    # Now convert back into uint8, and make original image
+    center = np.uint8(center)
+    res = center[label.flatten()]
+    res2 = res.reshape((img.shape))
+
+    cv2.imshow('res2',res2)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+    
+    
+    
+def meanshift(filename):
+    image = cv2.imread(filename)
+
+    # Convert the image to RGB format (scikit-image expects RGB)
+    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    image_rgb_resized = cv2.resize(image_rgb, (480, 320))
+    image_rgb_resized = cv2.GaussianBlur(image_rgb_resized, (5,5), 11, 11)
+    image_pyramid_filter = cv2.pyrMeanShiftFiltering(image_rgb_resized, 5, 10, maxLevel=1)
+    # Apply quick Mean Shift-based segmentation
+    segments = quickshift(image_pyramid_filter)
+    
+    # Display the segmented grayscale image
+    plt.figure(figsize=(8, 6))
+    plt.subplot(121)
+    plt.imshow(segments, cmap='magma')
+    plt.title('Segmented Grayscale Image')
+    plt.axis('off')
+    
+    plt.subplot(122)
+    plt.imshow(image_rgb_resized)
+    plt.title('Original Image')
+    plt.show()
+    
+
+def felzenszwalb_segmentation(filename):
+    image = cv2.imread(filename)
+
+    # Convert the image to RGB format (scikit-image expects RGB)
+    image_rgb = cv2.resize(image, (480, 320))
+    image_rgb = cv2.cvtColor(image_rgb, cv2.COLOR_BGR2RGB)
+    # Apply Felzenszwalb segmentation
+    # The parameters to adjust are scale and min_size
+    # - `scale` controls the trade-off between color similarity and spatial proximity. Smaller values lead to more segments.
+    # - `min_size` sets the minimum component size. Smaller values may result in smaller segments.
+    segments = felzenszwalb(image_rgb, scale=100)
+
+    # Display the segmented grayscale image
+    plt.figure(figsize=(8, 6))
+    plt.subplot(121)
+    plt.imshow(segments, cmap='gray')
+    plt.title('Segmented Grayscale Image')
+    plt.axis('off')
+    
+    plt.subplot(122)
+    plt.imshow(image_rgb)
+    plt.title('Original Image')
+    plt.show()
+    
+def slic_segmentation(filename):
+    # Load the image using OpenCV
+    image = cv2.imread(filename)
+    image_rgb = cv2.resize(image, (480, 320))
+    # Convert the image to RGB format (scikit-image expects RGB)
+    image_rgb = cv2.cvtColor(image_rgb, cv2.COLOR_BGR2RGB)
+
+    # Apply SLIC segmentation
+    # The parameters to adjust are n_segments and compactness
+    # - `n_segments` controls the approximate number of superpixels to generate.
+    # - `compactness` controls the trade-off between color similarity and spatial proximity.
+    segments = slic(image_rgb, n_segments=50, compactness=30.0)
+
+    # Display the segmented grayscale image
+    plt.figure(figsize=(8, 6))
+    plt.subplot(121)
+    plt.imshow(segments, cmap='gray')
+    plt.title('Segmented Grayscale Image')
+    plt.axis('off')
+    
+    plt.subplot(122)
+    plt.imshow(image_rgb)
+    plt.title('Original Image')
+    plt.show()
 
 
 
 if __name__ == "__main__":
     
-    
     # Implement K-means-clustering for image segmentation (2 CLusters Polter, !Polter)
     # Implement mean shift segmentation
-    # 
-    
     root = Tk()
     root.withdraw()
     filename = filedialog.askopenfilename(
@@ -378,42 +476,20 @@ if __name__ == "__main__":
         "Images Files", ["*.png", "*.jpg", "*.jpeg", "*.bmp"])])
     print(filename)
     
-    img = cv2.imread(filename)
-    img = cv2.resize(img, (640, 480))
     
-    #cv2.imshow("Normal Picture", img.copy())
+    #Segmentation methods
     
-    img_lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
-    #cv2.imshow("LAB Picture", img_lab.copy())
+    #k_means_segmentation(filename, K=7)
+    #meanshift(filename)
+    #felzenszwalb_segmentation(filename)
+    #slic_segmentation(filename)
     
-    img_filtered = cv2.pyrMeanShiftFiltering(img_lab, 5, 10, maxLevel=1)
-    #cv2.imshow("PYR_MEAN_SHIFT Picture", img_filtered.copy())
+    # Save or display the thresholded image
+    #cv2.imwrite('thresholded_image.jpg', thresholded_image)
+    #cv2.imshow('Thresholded Image', thresholded_image)
+    #cv2.waitKey(0)
+    #cv2.destroyAllWindows()
     
-    # Apply step 2: Identify clusters
-    threshold = 0.5
-    labels = meanShift.mean_shift_segmentation(img_filtered, threshold)
-    print(len(labels))
-    # Convert labels to a unique set of integers for better visualization
-    unique_labels = np.unique(labels)
-
-    # Create a blank canvas for painting the segments on the original image
-    segmented_image = np.zeros_like(img)
-
-    # Assign colors to each segment based on the cluster labels
-    for label in unique_labels:
-        # Generate a random color for each label
-        color = np.random.randint(0, 255, size=(3,))
-        # Create a mask for pixels belonging to the current label
-        mask = labels == label
-        # Paint the segmented_image with the color for this label
-        segmented_image[mask] = color
-
-    # Display the segmented image
-    cv2.imshow('Segmented Image', segmented_image)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-
-
     # Try out different threshold methods
     #.with_adaptive_threshold(51,15) C >= 0 when not much to none background C < 0 when Background in Image 15, -15 solid values
     # cb = CircleDetectorBuilder(filename, True) \
@@ -439,6 +515,7 @@ if __name__ == "__main__":
     # .with_morphology(operation=cv2.MORPH_OPEN, iterations=1) \
     # .with_watershed() \
     # .show()
+    #dev
 
 
     #Detect with Background
