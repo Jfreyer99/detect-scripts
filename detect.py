@@ -2,25 +2,27 @@ from tkinter import filedialog
 import numpy as np
 from collections import defaultdict
 import cv2
+from math import sqrt
+from pprint import pprint
 from matplotlib import pyplot as plt
 from IPython.display import Image, display
-from skimage.segmentation import quickshift, felzenszwalb, slic
+from skimage.segmentation import quickshift, felzenszwalb, slic, watershed
+from skimage.feature import blob_dog, blob_log, blob_doh
+from skimage.feature import peak_local_max
+from scipy import ndimage as ndi
 
 from tkinter import Tk
 from tkinter.filedialog import askopenfilename
 
 class CircleDetectorBuilder(object):
 
-    # Testing
-    #cv2.bilateralFilter (removes noise, leaves the egdes intact) still more testing involved
     #---------------------------------------------------------
     # TOP PRIORITY
-    # Try out MSER blob detector
     # Blob Descriptor for texture recongnition
-    # marker-based image segmentation using watershed algorithm
-
-    #-------------------------------------------------------
-    # #Try out Find Contours
+    # Blob Detection https://scikit-image.org/docs/stable/auto_examples/features_detection/plot_blob.html#sphx-glr-auto-examples-features-detection-plot-blob-py
+    # Local Binary Pattern for texture classification https://scikit-image.org/docs/stable/auto_examples/features_detection/plot_local_binary_pattern.html
+    # Compute Chi squared distance metric: sum((X-Y)^2 / (X+Y)) for finding C in adaptive threshold
+    # Gabor Filter https://scikit-image.org/docs/stable/auto_examples/features_detection/plot_gabor.html
     # Try out template Matching (pyramid)
 
     
@@ -30,6 +32,7 @@ class CircleDetectorBuilder(object):
         self.originalImage = None
         self.images = [self.originalImage]
         self.showFlag = showFlag
+        self.keypoints = None
         self.C = C
         self.circles = None
 
@@ -203,17 +206,19 @@ class CircleDetectorBuilder(object):
         #kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
         sure_bg = self.img
         
+        cv2.imshow('Before Transform.jpg', self.img)
         # Distance transform
         dist = cv2.distanceTransform(self.img, cv2.DIST_L2, 5)
-        cv2.imshow('Distance Transform', dist)
+        cv2.imwrite('Distance Transform.jpg', dist)
+        
+        dist2 = cv2.normalize(dist, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+        cv2.imwrite('Distance Transform Normalize.jpg', dist2)
         
         #foreground area
-        dist = dist.astype(np.uint8)
-        
+        dist2 = dist2.astype(np.uint8)
         #self.with_adaptive_threshold(31, self.C, maxValue=0.1 * dist.max())
         #ret, sure_fg = cv2.threshold(dist, 0.01 * dist.max(), 255, cv2.THRESH_BINARY)
-        
-        ret, sure_fg = cv2.threshold(dist, 0.6 * dist.max(), 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+        ret, sure_fg = cv2.threshold(dist2, 0.01 * dist2.max(), 255, cv2.THRESH_BINARY)
         
         sure_fg = self.img.astype(np.uint8)  
         cv2.imshow('Sure Foreground', sure_fg)
@@ -282,11 +287,8 @@ class CircleDetectorBuilder(object):
         params = cv2.SimpleBlobDetector_Params()
         
         # Set Area filtering parameters
-        params.filterByArea = False        
+        params.filterByArea = True        
         params.minArea = 10
-                
-        params.minThreshold = 0;
-        params.maxThreshold = 255;
         
         # Set Circularity filtering parameters
         params.filterByCircularity = True 
@@ -304,10 +306,17 @@ class CircleDetectorBuilder(object):
         detector = cv2.SimpleBlobDetector_create(params)
 
         cv2.imshow("before detection", self.img)
+        
+        #_, self.img = cv2.threshold(self.img, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+        
+        #cv2.imshow("before detection threshold", self.img)
+        
         # Detect blobs
         keypoints = detector.detect(self.img)
+        self.keypoints = keypoints
         
-        #print(keypoints)
+        #Use for Debug
+        #pprint(vars(self.keypoints))
 
         # Draw blobs on our image as red circles
         blank = np.zeros((1, 1)) 
@@ -315,8 +324,6 @@ class CircleDetectorBuilder(object):
                                 cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
         
         cv2.imshow("Keypoints", blobs)
-        # cv2.waitKey(0)
-        #cv2.destroyAllWindows()
         return self
 
     def with_detect_circles(self, method=cv2.HOUGH_GRADIENT, dp=1, minDist=10, param1=200, param2=100):
@@ -361,7 +368,7 @@ class CircleDetectorBuilder(object):
         cv2.namedWindow('Final Image')
         cv2.moveWindow('Final Image', x, y+1200)
         cv2.imshow('Final Image', self.originalImage)
-        #dev
+        
         
 
 def k_means_segmentation(filename, K):
@@ -386,24 +393,27 @@ def k_means_segmentation(filename, K):
     cv2.imshow('res2',res2)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
-    
-    
-    
+     
 def meanshift(filename):
     image = cv2.imread(filename)
 
     # Convert the image to RGB format (scikit-image expects RGB)
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     image_rgb_resized = cv2.resize(image_rgb, (480, 320))
+    image_lab = cv2.cvtColor(image_rgb_resized, cv2.COLOR_RGB2LAB)
+    
     image_rgb_resized = cv2.GaussianBlur(image_rgb_resized, (5,5), 11, 11)
-    image_pyramid_filter = cv2.pyrMeanShiftFiltering(image_rgb_resized, 5, 10, maxLevel=1)
+    image_lab = cv2.pyrMeanShiftFiltering(image_lab, 5, 10, maxLevel=1)
+    
     # Apply quick Mean Shift-based segmentation
-    segments = quickshift(image_pyramid_filter)
+    segments = quickshift(image_lab, ratio=0.5, max_dist=100)
+    
+    print(len(segments))
     
     # Display the segmented grayscale image
     plt.figure(figsize=(8, 6))
     plt.subplot(121)
-    plt.imshow(segments, cmap='magma')
+    plt.imshow(segments, cmap='gray')
     plt.title('Segmented Grayscale Image')
     plt.axis('off')
     
@@ -411,7 +421,6 @@ def meanshift(filename):
     plt.imshow(image_rgb_resized)
     plt.title('Original Image')
     plt.show()
-    
 
 def felzenszwalb_segmentation(filename):
     image = cv2.imread(filename)
@@ -436,7 +445,7 @@ def felzenszwalb_segmentation(filename):
     plt.imshow(image_rgb)
     plt.title('Original Image')
     plt.show()
-    
+
 def slic_segmentation(filename):
     # Load the image using OpenCV
     image = cv2.imread(filename)
@@ -448,7 +457,7 @@ def slic_segmentation(filename):
     # The parameters to adjust are n_segments and compactness
     # - `n_segments` controls the approximate number of superpixels to generate.
     # - `compactness` controls the trade-off between color similarity and spatial proximity.
-    segments = slic(image_rgb, n_segments=50, compactness=30.0)
+    segments = slic(image_rgb, n_segments=2, compactness=10, sigma=1)
 
     # Display the segmented grayscale image
     plt.figure(figsize=(8, 6))
@@ -461,13 +470,23 @@ def slic_segmentation(filename):
     plt.imshow(image_rgb)
     plt.title('Original Image')
     plt.show()
-
-
-
-if __name__ == "__main__":
     
-    # Implement K-means-clustering for image segmentation (2 CLusters Polter, !Polter)
-    # Implement mean shift segmentation
+def watershed_segmentation(filename):
+    image = cv2.imread(filename, cv2.IMREAD_GRAYSCALE)
+    image_gray = cv2.resize(image, (480, 320))
+    return NotImplemented
+
+
+def blob_detection_log(img):
+    return NotImplemented
+
+def blob_detection_dog(img):
+    return NotImplemented
+
+def blob_detection_doh(img):
+    return NotImplemented
+
+def chooseFile() -> str:
     root = Tk()
     root.withdraw()
     filename = filedialog.askopenfilename(
@@ -475,20 +494,63 @@ if __name__ == "__main__":
     filetypes=[(
         "Images Files", ["*.png", "*.jpg", "*.jpeg", "*.bmp"])])
     print(filename)
+    return filename
+
+if __name__ == "__main__":
+    
+    filename = chooseFile()
+    
+    # image = cv2.imread(filename)
+    # image = cv2.resize(image, (480, 320))
+    # image = cv2.GaussianBlur(image, (5,5), sigmaX=33, sigmaY=33)
+    # image = cv2.pyrMeanShiftFiltering(image, 10, 10)
+    # cv2.imshow("PYRMEAN",image)
+    
+    # image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # #image_gray = cv2.adaptiveThreshold(image_gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 57, 15)
+    # #cv2.imshow("threshold",image_gray)
+    
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+    
+    # #blobs_log = blob_log(image_gray, max_sigma=30, num_sigma=10, threshold=.1)
+
+    # # Compute radii in the 3rd column.
+    # #blobs_log[:, 2] = blobs_log[:, 2] * sqrt(2)
+
+    # #blobs_dog = blob_dog(image_gray, threshold=0.2)
+    # #blobs_dog[:, 2] = blobs_dog[:, 2] * sqrt(2)
+
+    # blobs_doh = blob_doh(image_gray, max_sigma=30, threshold=.01)
+
+    # blobs_list = [blobs_doh]
+    # color = ['yellow']
+    # title = ['Laplacian of Gaussian']
+    # sequence = zip(blobs_list, color, title)
+
+    # fig, axes = plt.subplots(1, 3, figsize=(9, 3), sharex=True, sharey=True)
+    # ax = axes.ravel()
+
+    # for idx, (blobs, color, title) in enumerate(sequence):
+    #     ax[idx].set_title(title)
+    #     ax[idx].imshow(image)
+    #     for blob in blobs:
+    #         y, x, r = blob
+    #         c = plt.Circle((x, y), r, color=color, linewidth=2, fill=False)
+    #         ax[idx].add_patch(c)
+    #     ax[idx].set_axis_off()
+
+    # plt.tight_layout()
+    # plt.show()
     
     
-    #Segmentation methods
     
-    #k_means_segmentation(filename, K=7)
+    # --------------------------- Segmentation methods
+    #k_means_segmentation(filename, K=2)
     #meanshift(filename)
     #felzenszwalb_segmentation(filename)
     #slic_segmentation(filename)
-    
-    # Save or display the thresholded image
-    #cv2.imwrite('thresholded_image.jpg', thresholded_image)
-    #cv2.imshow('Thresholded Image', thresholded_image)
-    #cv2.waitKey(0)
-    #cv2.destroyAllWindows()
     
     # Try out different threshold methods
     #.with_adaptive_threshold(51,15) C >= 0 when not much to none background C < 0 when Background in Image 15, -15 solid values
@@ -505,13 +567,13 @@ if __name__ == "__main__":
 
 
     # Detect without Background
-    # cb = CircleDetectorBuilder(filename, True) \
+    # cb = CircleDetectorBuilder(filename, True, 15) \
     # .with_read_image() \
     # .with_resize_absolute(480, 360) \
     # .with_pyr_mean_shift_filter() \
     # .with_hue_shift() \
     # .with_gaussian_blur(kernelSize=(5,5))\
-    # .with_adaptive_threshold(67, 15) \
+    # .with_adaptive_threshold(67, 0) \
     # .with_morphology(operation=cv2.MORPH_OPEN, iterations=1) \
     # .with_watershed() \
     # .show()
@@ -544,18 +606,17 @@ if __name__ == "__main__":
     # .show()
 
     #Important
-    # cb = CircleDetectorBuilder(filename, True, 15) \
-    # .with_read_image() \
-    # .with_resize_absolute(480, 320) \
-    # .with_gaussian_blur(33, 33, kernelSize=(5,5)) \
-    # .with_pyr_mean_shift_filter(10,32, maxLevel=1) \
-    # .with_hue_shift() \
-    # .with_adaptive_threshold(67,0) \
-    # .with_morphology(kernelX= 5, kernelY=5, operation=cv2.MORPH_ERODE) \
-    # .with_watershed() \
-    # .with_gaussian_blur(11, 11) \
-    # .with_detect_blobs_MSER() \
-    # .show()
+    cb = CircleDetectorBuilder(filename, True, 1) \
+    .with_read_image() \
+    .with_resize_absolute(480, 320) \
+    .with_pyr_mean_shift_filter(10,12, maxLevel=1) \
+    .with_gaussian_blur(33, 33, (5,5)) \
+    .with_hue_shift() \
+    .with_adaptive_threshold(21,0) \
+    .with_watershed() \
+    .with_gaussian_blur(11, 11) \
+    .with_detect_blobs_MSER() \
+    .show()
 
 
     # Background
