@@ -374,25 +374,28 @@ class CircleDetectorBuilder(object):
 def k_means_segmentation(filename, K):
     img = cv2.imread(filename)
     img = cv2.resize(img, (640, 480))
-    cv2.imshow('original', img.copy())
+    img_or = img.copy()
+    #cv2.imshow('original', img.copy())
+    
     img = cv2.GaussianBlur(img, (5,5), sigmaX=11, sigmaY=11)
     img = cv2.pyrMeanShiftFiltering(img, 5, 10, maxLevel=1)
-    cv2.imshow('Mean Shift Filter',img.copy())
-    Z = img.reshape((-1,3))
+    #cv2.imshow('Mean Shift Filter',img.copy())
+    
+    Z = img.reshape((-1, 3))
     # convert to np.float32
     Z = np.float32(Z)
     
     # define criteria, number of clusters(K) and apply kmeans()
-    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 1, 20)
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 1, 300)
     ret,label,center=cv2.kmeans(Z, K, None, criteria, 50, cv2.KMEANS_PP_CENTERS)
     # Now convert back into uint8, and make original image
     center = np.uint8(center)
     res = center[label.flatten()]
     res2 = res.reshape((img.shape))
 
-    cv2.imshow('res2',res2)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    #cv2.imshow('res2',res2)
+    
+    return res2, img_or
      
 def meanshift(filename):
     image = cv2.imread(filename)
@@ -480,15 +483,6 @@ def watershed_segmentation(filename):
     image = cv2.imread(filename, cv2.IMREAD_GRAYSCALE)
     image_gray = cv2.resize(image, (480, 320))
     return NotImplemented
-
-
-def blob_detection_log(img):
-    return NotImplemented
-
-def blob_detection_dog(img):
-    return NotImplemented
-
-def blob_detection_doh(img):
     return NotImplemented
 
 def chooseFile() -> str:
@@ -500,11 +494,54 @@ def chooseFile() -> str:
         "Images Files", ["*.png", "*.jpg", "*.jpeg", "*.bmp"])])
     print(filename)
     return filename
+    
+def compare_k_means(filename, K, C, blocksize):
+    K = K
+    start=2
+    
+    C= C
+    blockSize = blocksize
+    
+    fig, axs = plt.subplots(K-1, 5, figsize=(15, 15))
+    
+    for i in range(start, K+1):
+        print("K={}".format(i))
+        
+        img, original = k_means_segmentation(filename, i)
+        org = original
+                        
+        img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        
+        _, img_binary = cv2.threshold(img_gray, 100, 255, cv2.THRESH_BINARY)
+        
+        _, img_otsu = cv2.threshold(img_gray, 0, 255, cv2.THRESH_OTSU | cv2.THRESH_BINARY)
+        
+        img_adaptive = cv2.adaptiveThreshold(img_gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, blockSize, C)
+        
+        fig.suptitle('K-means K={}'.format(K))
+        axs[i-start, 0].imshow(img.copy())
+        axs[i-start, 0].set_title('K-means K={}'.format(i))
+        
+        axs[i-start, 1].imshow(img_binary.copy())
+        axs[i-start, 1].set_title('K-means with Binary K={}'.format(i))
+        
+        axs[i-start, 2].imshow(img_otsu.copy())
+        axs[i-start, 2].set_title('K-means with Otsu K={}'.format(i))
+        
+        axs[i-start, 3].imshow(img_adaptive.copy())
+        axs[i-start, 3].set_title('K-means Adaptive K={}, Blocksize={}, C={}'.format(i, blockSize, C))
+        
+        axs[i-start, 4].hist(img.ravel(),256,[0,256])
+        axs[i-start, 4].set_title('K-means Histogram K={}'.format(i))
+        
+    plt.show()
 
 if __name__ == "__main__":
     
     filename = chooseFile()
-        
+    
+    compare_k_means(filename, 6, 15, 51)
+    
     # image = cv2.imread(filename)
     # image = cv2.resize(image, (480, 320))
     # image = cv2.GaussianBlur(image, (5,5), sigmaX=33, sigmaY=33)
@@ -548,11 +585,10 @@ if __name__ == "__main__":
 
     # plt.tight_layout()
     # plt.show()
-    
-    
+
     
     # --------------------------- Segmentation methods
-    #k_means_segmentation(filename, K=2)
+        
     #meanshift(filename)
     #felzenszwalb_segmentation(filename)
     #slic_segmentation(filename)
@@ -598,17 +634,17 @@ if __name__ == "__main__":
 
 
     #Important
-    cb = CircleDetectorBuilder(filename, True, -15) \
-    .with_read_image() \
-    .with_resize_absolute(480, 320) \
-    .with_gaussian_blur(33, 33, kernelSize=(5,5)) \
-    .with_pyr_mean_shift_filter(10,20, maxLevel=1) \
-    .with_hue_shift() \
-    .with_adaptive_threshold(67, 0) \
-    .with_watershed() \
-    .with_gaussian_blur(11, 11) \
-    .with_detect_blobs_MSER() \
-    .show()
+    # cb = CircleDetectorBuilder(filename, True, -15) \
+    # .with_read_image() \
+    # .with_resize_absolute(480, 320) \
+    # .with_gaussian_blur(33, 33, kernelSize=(5,5)) \
+    # .with_pyr_mean_shift_filter(10,20, maxLevel=1) \
+    # .with_hue_shift() \
+    # .with_adaptive_threshold(67, 0) \
+    # .with_watershed() \
+    # .with_gaussian_blur(11, 11) \
+    # .with_detect_blobs_MSER() \
+    # .show()
 
     #Important
     # cb = CircleDetectorBuilder(filename, True, 15) \
