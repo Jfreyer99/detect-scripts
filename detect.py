@@ -10,6 +10,10 @@ from skimage.segmentation import quickshift, felzenszwalb, slic, watershed
 from skimage.feature import blob_dog, blob_log, blob_doh
 from skimage.feature import peak_local_max
 from scipy import ndimage as ndi
+from scipy.ndimage import distance_transform_edt
+from sklearn.feature_extraction import image
+from sklearn.cluster import spectral_clustering
+
 import imutils
 
 
@@ -34,6 +38,7 @@ class CircleDetectorBuilder(object):
         self.img = None
         self.filename = filename
         self.originalImage = None
+        self.filteredImage = None
         self.images = [self.originalImage]
         self.showFlag = showFlag
         self.keypoints = None
@@ -152,11 +157,13 @@ class CircleDetectorBuilder(object):
     def with_pyr_mean_shift_filter(self, sp=2, sr=12, maxLevel=2):
         self.img = cv2.pyrMeanShiftFiltering(self.img, sp, sr, maxLevel=2)
         cv2.imshow("Mean shift filterd", self.img) 
+        self.filteredImage = self.img.copy()
         return self
     
     def with_gaussian_blur(self, sigmaX, sigmaY, kernelSize=(5,5), borderType=0):
         self.img = cv2.GaussianBlur(self.img, kernelSize, borderType, sigmaX, sigmaY)
         cv2.imshow("Gauss", self.img.copy())
+        self.filteredImage = self.img.copy()
         #self.push_image()
         return self
     
@@ -180,6 +187,12 @@ class CircleDetectorBuilder(object):
     def with_blur(self, kernelSize=3):
         self.img = cv2.blur(self.img, (kernelSize, kernelSize))
         self.push_image()
+        return self
+    
+    def with_egde_preserving_filter(self, k=3, threshhold=127):
+        self.img = cv2.ximgproc.edgePreservingFilter(self.img, k, threshhold)
+        self.filteredImage = self.img
+        cv2.imshow("egde_perserving_filter", self.img)
         return self
     
     def with_erosion(self, kernelX=5, kernelY=5, iterations=1, borderType=cv2.BORDER_CONSTANT):
@@ -212,8 +225,10 @@ class CircleDetectorBuilder(object):
         
         cv2.imshow('Before Transform.jpg', self.img)
         # Distance transform
+        
         dist = cv2.distanceTransform(self.img, cv2.DIST_L2, 5)
         cv2.imwrite('Distance Transform.jpg', dist)
+        
         
         dist2 = cv2.normalize(dist, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
         cv2.imwrite('Distance Transform Normalize.jpg', dist2)
@@ -221,10 +236,12 @@ class CircleDetectorBuilder(object):
         #foreground area
         dist2 = dist2.astype(np.uint8)
         #self.with_adaptive_threshold(31, self.C, maxValue=0.1 * dist.max())
-        #ret, sure_fg = cv2.threshold(dist, 0.01 * dist.max(), 255, cv2.THRESH_BINARY)
-        ret, sure_fg = cv2.threshold(dist2, 0.3 * dist2.max(), 255, cv2.THRESH_BINARY)
         
-        sure_fg = self.img.astype(np.uint8)  
+        ret, sure_fg = cv2.threshold(dist, 0.4 * dist.max(), 255, cv2.THRESH_BINARY)
+        
+        #ret, sure_fg = cv2.threshold(dist2, 0, 255, cv2.THRESH_BINARY| cv2.THRESH_OTSU)
+        
+        sure_fg = self.img.astype(np.uint8)
         cv2.imshow('Sure Foreground', sure_fg)
         
         # unknown area
@@ -239,18 +256,20 @@ class CircleDetectorBuilder(object):
         markers += 1
         # mark the region of unknown with zero
         markers[unknown == 255] = 0
-        # fig, ax = plt.subplots(figsize=(6, 6))
-        # ax.imshow(markers, cmap="tab20b")
-        # ax.axis('off')
-        # plt.show()
+        
+        fig, ax = plt.subplots(figsize=(6, 6))
+        ax.imshow(markers, cmap="gray")
+        ax.axis('off')
+        plt.show()
         
         # watershed Algorithm
-        markers = cv2.watershed(self.originalImage, markers)
+        markers = cv2.watershed(self.filteredImage, markers)
         
-        # fig, ax = plt.subplots(figsize=(5, 5))
-        # ax.imshow(markers, cmap="tab20b")
-        # ax.axis('off')
-        # plt.show()
+        
+        fig, ax = plt.subplots(figsize=(5, 5))
+        ax.imshow(markers, cmap="tab20b")
+        ax.axis('off')
+        plt.show()
         
         labels = np.unique(markers)
         
@@ -289,14 +308,14 @@ class CircleDetectorBuilder(object):
         # Set our filtering parameters
         # Initialize parameter setting using cv2.SimpleBlobDetector
         params = cv2.SimpleBlobDetector_Params()
-    
+
         
         # Set Area filtering parameters
         params.filterByArea = False        
         params.minArea = 10
         
         # Set Circularity filtering parameters
-        params.filterByCircularity = False 
+        params.filterByCircularity = True 
         params.minCircularity = 0.5
         
         # Set Convexity filtering parameters
@@ -370,7 +389,6 @@ class CircleDetectorBuilder(object):
         cv2.namedWindow('Final Image')
         cv2.moveWindow('Final Image', x, y+1200)
         cv2.imshow('Final Image', self.originalImage)
-        #t
         
 
 def k_means_segmentation(filename, K):
@@ -491,12 +509,18 @@ def chooseFile() -> str:
     root = Tk()
     root.withdraw()
     filename = filedialog.askopenfilename(
-    initialdir="./pictures", title="Choose an image",
+    initialdir="./perpendicular", title="Choose an image",
     filetypes=[(
         "Images Files", ["*.png", "*.jpg", "*.jpeg", "*.bmp"])])
     print(filename)
     return filename
     
+    
+def float_range(start: float, stop: float, increment: float) -> float:
+    while start < stop: # and not math.isclose(start, stop): Py>3.5
+        yield start
+        start += increment
+        
 def compare_k_means(filename, K, C, blocksize):
     K = K
     start=2
@@ -545,7 +569,7 @@ if __name__ == "__main__":
     # BINARIZATION_SAUVOLA: int
     # BINARIZATION_WOLF: int
     # BINARIZATION_NICK: int
-    
+
     # DTF_NC: int
     # DTF_IC: int
     # DTF_RF: int
@@ -555,149 +579,175 @@ if __name__ == "__main__":
     # """One of [DTF_NC, DTF_IC, DTF_RF, GUIDED_FILTER, AM_FILTER]"""
     
     filename = chooseFile()
-    img = cv2.imread(filename)
-    img = cv2.resize(img, (1200, 780))
+    # img = cv2.imread(filename)
+    # img = cv2.resize(img, (480, 320))
+    # img_filt = cv2.ximgproc.edgePreservingFilter(img, 5, 127)
     
-    img_ori = img.copy()
-    img = cv2.GaussianBlur(img, (5,5), sigmaX=33, sigmaY=33)
-    img = cv2.pyrMeanShiftFiltering(img, 5, 10)
-    
-    cv2.imshow("Original",img.copy())
-    
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    
-    t_sauvola = cv2.ximgproc.niBlackThreshold(img, 255, cv2.THRESH_BINARY_INV, 67, 0.6, binarizationMethod=cv2.ximgproc.BINARIZATION_SAUVOLA)
-    # Initializing parameter setting using cv2.SimpleBlobDetector function
-    params = cv2.SimpleBlobDetector_Params()
-    
-    params.filterByColor = True
-    params.blobColor = 0
-    
-    # Filter by area (value for area here defines the pixel value)
-    params.filterByArea = False
-    params.minArea = 5
-    
-    # Filter by circularity
-    params.filterByCircularity = False
-    params.minCircularity = 0.5
-    
-    # Filter by convexity
-    params.filterByConvexity = False
-    params.minConvexity = 0.1
-        
-    # Filter by inertia ratio
-    params.filterByInertia = False
-    params.minInertiaRatio = 0.01
-    
-    # Creating a blob detector using the defined parameters
-    detector = cv2.SimpleBlobDetector_create(params)
-        
-    # Detecting the blobs in the image
-    keypoints = detector.detect(t_sauvola)
-    
-    # Drawing the blobs that have been filtered with green on the image
-    blank = np.zeros((1, 1))
-    blobs = cv2.drawKeypoints(img, keypoints, blank, (0, 255, 0),
-                            cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+    # print("debug")
     
     
-    # Setting the grid size
-    plt.figure(figsize=(20,20))
+    # img_ori = img.copy()
+    # img = cv2.GaussianBlur(img, (9,9), sigmaX=33, sigmaY=33)
+    # img = cv2.pyrMeanShiftFiltering(img, 10, 10)
     
-    # Displaying the image
-    plt.subplot(121)
-    plt.title('Original')
-    plt.imshow(img, cmap='gray')
+    # #cv2.imshow("Original",img.copy())
     
-    plt.subplot(122)
-    plt.title('Blobs')
-    plt.imshow(blobs)
+    # img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     
-    plt.show()
+    # t_sauvola = cv2.ximgproc.niBlackThreshold(img, 255, cv2.THRESH_BINARY, 57, 0.2, binarizationMethod=cv2.ximgproc.BINARIZATION_SAUVOLA)
     
+    # for i in float_range(-0.5, 0.5, 0.01):
+    #     i = round(i, 3)
+    #     print(i)
+    #     t_sauvola = cv2.ximgproc.niBlackThreshold(img, 255, cv2.THRESH_BINARY, 11, i, binarizationMethod=cv2.ximgproc.BINARIZATION_SAUVOLA)
+    #     cv2.imwrite("/home/whoami/projects/python/hough-detect/threshold/threshold_sauvola{}.jpg".format(i), t_sauvola)
     
-    #NiBlack
-    t_black = cv2.ximgproc.niBlackThreshold(img, 255, cv2.THRESH_BINARY_INV, 31, 0.5, binarizationMethod=cv2.ximgproc.BINARIZATION_NIBLACK )
-    #WOLF
-    t_wolf = cv2.ximgproc.niBlackThreshold(img, 255, cv2.THRESH_BINARY_INV, 31, 0.5, cv2.ximgproc.BINARIZATION_WOLF)
-    #NICK
-    t_nick = cv2.ximgproc.niBlackThreshold(img, 255, cv2.THRESH_BINARY_INV, 31, 0.5, cv2.ximgproc.BINARIZATION_NICK)
+    # cv2.imwrite("/home/whoami/projects/python/hough-detect/threshold/Original.jpg", img_ori)
     
-    t_sauvola_inv = cv2.bitwise_not(t_sauvola)
-    
-    t_sauvola_cross = cv2.morphologyEx(t_sauvola, cv2.MORPH_DILATE, (5, 5), iterations=2)
-    
-    cv2.imshow("Thres sauvola", t_sauvola)
-    
-    cv2.imshow("Thres sauvola inv", t_sauvola_inv)
-    
-    #noise removal
-    kernel = np.ones((3,3),np.uint8)
-    opening = cv2.morphologyEx(t_sauvola,cv2.MORPH_OPEN,kernel)
-    
-    # sure background area
-    sure_bg = cv2.dilate(opening,kernel)
-    
-    # Finding sure foreground area
-    dist_transform = cv2.distanceTransform(opening,cv2.DIST_L2, 5)
-    
-    dist_transform = cv2.normalize(dist_transform, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-    
-    ret, sure_fg = cv2.threshold(dist_transform, 0.2*dist_transform.max(), 255,0)
-    
-    cv2.imwrite('Distance Transform Normalize.jpg', dist_transform)
-    
-    # Finding unknown region
-    sure_fg = np.uint8(sure_fg)
-    unknown = cv2.subtract(sure_bg,sure_fg)
+    #t_sauvola = cv2.ximgproc.niBlackThreshold(img, 255, cv2.THRESH_BINARY_INV, 67, 0.1, binarizationMethod=cv2.ximgproc.BINARIZATION_SAUVOLA)
 
-    cv2.imshow("Sure Foreground", sure_fg)
-    cv2.imshow("Sure Background", sure_bg)
-    cv2.imshow("Unknown", unknown)
+    # # Canny Edge Detection
+    # edges = cv2.Canny(image=img, threshold1=5, threshold2=15, L2gradient=True) # Canny Edge Detection
+    # #Display Canny Edge Detection Image
+    # cv2.imshow('Canny Edge Detection', edges)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
     
-    # Marker labelling
-    ret, markers = cv2.connectedComponents(sure_fg)
-    # Add one to all labels so that sure background is not 0, but 1
-    markers = markers+1
-    # Now, mark the region of unknown with zero
-    markers[unknown==255] = 0
+    # t_sauvola = cv2.ximgproc.niBlackThreshold(img, 255, cv2.THRESH_BINARY_INV, 67, 0.1, binarizationMethod=cv2.ximgproc.BINARIZATION_SAUVOLA)
     
-    # plt.figure()
-    # plt.imshow(markers, cmap="jet")
+    # cv2.imshow("Thres", t_sauvola)
+    # cv2.waitKey(0)
+    # # Initializing parameter setting using cv2.SimpleBlobDetector function
+    # params = cv2.SimpleBlobDetector_Params()
+    
+    # params.filterByColor = True
+    # params.blobColor = 255
+    
+    # # Filter by area (value for area here defines the pixel value)
+    # params.filterByArea = False
+    # params.minArea = 5
+    
+    # # Filter by circularity
+    # params.filterByCircularity = False
+    # params.minCircularity = 0.5
+    
+    # # Filter by convexity
+    # params.filterByConvexity = False
+    # params.minConvexity = 0.1
+        
+    # # Filter by inertia ratio
+    # params.filterByInertia = False
+    # params.minInertiaRatio = 0.01
+    
+    # # Creating a blob detector using the defined parameters
+    # detector = cv2.SimpleBlobDetector_create(params)
+        
+    # # Detecting the blobs in the image
+    # keypoints = detector.detect(t_sauvola)
+    
+    # # Drawing the blobs that have been filtered with green on the image
+    # blank = np.zeros((1, 1))
+    # blobs = cv2.drawKeypoints(img_ori, keypoints, blank, (255, 255, 0),
+    #                         cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+    
+    
+    # # Setting the grid size
+    # plt.figure(figsize=(20,20))
+    
+    # # Displaying the image
+    # plt.subplot(121)
+    # plt.title('Original')
+    # plt.imshow(img_ori, cmap='gray')
+    
+    # plt.subplot(122)
+    # plt.title('Blobs')
+    # plt.imshow(blobs)
+    
     # plt.show()
+    # cv2.destroyAllWindows()
     
-    markers = cv2.watershed(img_ori.copy(), markers)
+    # #NiBlack
+    # t_black = cv2.ximgproc.niBlackThreshold(img, 255, cv2.THRESH_BINARY_INV, 31, 0.5, binarizationMethod=cv2.ximgproc.BINARIZATION_NIBLACK )
+    # #WOLF
+    # t_wolf = cv2.ximgproc.niBlackThreshold(img, 255, cv2.THRESH_BINARY_INV, 31, 0.5, cv2.ximgproc.BINARIZATION_WOLF)
+    # #NICK
+    # t_nick = cv2.ximgproc.niBlackThreshold(img, 255, cv2.THRESH_BINARY_INV, 31, 0.5, cv2.ximgproc.BINARIZATION_NICK)
     
-    labels = np.unique(markers)
+    # t_sauvola_inv = cv2.bitwise_not(t_sauvola)
     
-    tree = []
-    for label in labels[:]:  
+    # t_sauvola_cross = cv2.morphologyEx(t_sauvola, cv2.MORPH_DILATE, (5, 5), iterations=2)
     
-    # Create a binary image in which only the area of the label is in the foreground 
-    #and the rest of the image is in the background   
-        target = np.where(markers == label, 255, 0).astype(np.uint8)
+    # cv2.imshow("Thres sauvola", t_sauvola)
+    
+    # cv2.imshow("Thres sauvola inv", t_sauvola_inv)
+    
+    # #noise removal
+    # kernel = np.ones((3,3),np.uint8)
+    # opening = cv2.morphologyEx(t_sauvola,cv2.MORPH_OPEN,kernel)
+    
+    # # sure background area
+    # sure_bg = cv2.dilate(opening,kernel)
+    
+    # # Finding sure foreground area
+    # dist_transform = cv2.distanceTransform(opening,cv2.DIST_L2, 5)
+    
+    # dist_transform = cv2.normalize(dist_transform, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+    
+    # ret, sure_fg = cv2.threshold(dist_transform, 0.2*dist_transform.max(), 255,0)
+    
+    # cv2.imwrite('Distance Transform Normalize.jpg', dist_transform)
+    
+    # # Finding unknown region
+    # sure_fg = np.uint8(sure_fg)
+    # unknown = cv2.subtract(sure_bg,sure_fg)
+
+    # cv2.imshow("Sure Foreground", sure_fg)
+    # cv2.imshow("Sure Background", sure_bg)
+    # cv2.imshow("Unknown", unknown)
+    
+    # # Marker labelling
+    # ret, markers = cv2.connectedComponents(sure_fg)
+    # # Add one to all labels so that sure background is not 0, but 1
+    # markers = markers+1
+    # # Now, mark the region of unknown with zero
+    # markers[unknown==255] = 0
+    
+    # # plt.figure()
+    # # plt.imshow(markers, cmap="jet")
+    # # plt.show()
+    
+    # markers = cv2.watershed(img_ori.copy(), markers)
+    
+    # labels = np.unique(markers)
+    
+    # tree = []
+    # for label in labels[:]:  
+    
+    # # Create a binary image in which only the area of the label is in the foreground 
+    # #and the rest of the image is in the background   
+    #     target = np.where(markers == label, 255, 0).astype(np.uint8)
         
-    # Perform contour extraction on the created binary image
-        contours, hierarchy = cv2.findContours(
-            target, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
-        tree.append(contours[0])
+    # # Perform contour extraction on the created binary image
+    #     contours, hierarchy = cv2.findContours(
+    #         target, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    #     )
+    #     tree.append(contours[0])
         
-    contours = cv2.drawContours(img_ori.copy(), tree, -1, color=(255, 255, 255), thickness=cv2.FILLED)
-    cv2.imshow("Contours", contours)
+    # contours = cv2.drawContours(img_ori.copy(), tree, -1, color=(255, 255, 255), thickness=cv2.FILLED)
+    # cv2.imshow("Contours", contours)
     
-    diff = cv2.subtract(cv2.cvtColor(contours, cv2.COLOR_BGR2GRAY), cv2.cvtColor(img_ori, cv2.COLOR_BGR2GRAY))
+    # diff = cv2.subtract(cv2.cvtColor(contours, cv2.COLOR_BGR2GRAY), cv2.cvtColor(img_ori, cv2.COLOR_BGR2GRAY))
     
-    diff[diff != 0] = 255
+    # diff[diff != 0] = 255
     
-    cv2.imshow("Difference",diff)
+    # cv2.imshow("Difference",diff)
     
     # cv2.imshow("Thres black",t_black)
     # cv2.imshow("Thres wolf",t_wolf)
     # cv2.imshow("Thres nick",t_nick)
     
-    cv2.waitKey()
-    cv2.destroyAllWindows()
+    # cv2.waitKey()
+    # cv2.destroyAllWindows()
     
     #compare_k_means(filename, 6, 15, 51)
     
@@ -797,13 +847,28 @@ if __name__ == "__main__":
     # .with_read_image() \
     # .with_resize_absolute(480, 320) \
     # .with_gaussian_blur(33, 33, kernelSize=(5,5)) \
-    # .with_pyr_mean_shift_filter(10,20, maxLevel=1) \
+    # .with_pyr_mean_shift_filter(20,20, maxLevel=1) \
     # .with_hue_shift() \
     # .with_adaptive_threshold(67, 0) \
     # .with_watershed() \
     # .with_gaussian_blur(11, 11) \
     # .with_detect_blobs_MSER() \
     # .show()
+    
+    #Important fast filtering
+    cb = CircleDetectorBuilder(filename, True, -15) \
+    .with_read_image() \
+    .with_resize_absolute(480, 320) \
+    .with_egde_preserving_filter(k=5) \
+    .with_pyr_mean_shift_filter(5,10, maxLevel=1) \
+    .with_hue_shift() \
+    .with_adaptive_threshold(67, 0) \
+    .with_watershed() \
+    .with_gaussian_blur(11, 11) \
+    .with_detect_blobs_MSER() \
+    .show()
+    
+    # Post processing
 
     #Important
     # cb = CircleDetectorBuilder(filename, True, 15) \
