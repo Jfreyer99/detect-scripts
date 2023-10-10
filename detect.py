@@ -1,3 +1,4 @@
+import os
 from tkinter import filedialog
 import numpy as np
 from collections import defaultdict
@@ -12,7 +13,13 @@ from skimage.feature import peak_local_max
 from scipy import ndimage as ndi
 from scipy.ndimage import distance_transform_edt
 from sklearn.feature_extraction import image
-from sklearn.cluster import spectral_clustering
+from sklearn.cluster import SpectralClustering, spectral_clustering
+from sklearn.cluster import KMeans
+
+
+from skimage import (
+    data, restoration, util
+)
 
 import imutils
 
@@ -29,7 +36,6 @@ class CircleDetectorBuilder(object):
     
     # Blob Descriptor for texture recongnition
     # Local Binary Pattern for texture classification https://scikit-image.org/docs/stable/auto_examples/features_detection/plot_local_binary_pattern.html
-    # Compute Chi squared distance metric: sum((X-Y)^2 / (X+Y)) for finding C in adaptive threshold
     # Gabor Filter https://scikit-image.org/docs/stable/auto_examples/features_detection/plot_gabor.html
     # Try out template Matching (pyramid)
 
@@ -82,10 +88,6 @@ class CircleDetectorBuilder(object):
         bgr = self.img[:,:,0:3]
         hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
         h,s,v = cv2.split(hsv)
-
-        # cv2.imshow('h.png', h)
-        # cv2.imshow('s.png', s)
-        # cv2.imshow('v.png', v)
 
         hnew = np.mod(h + amount, 180).astype(np.uint8)
         hsv_new = cv2.merge([hnew,s,v])
@@ -156,20 +158,20 @@ class CircleDetectorBuilder(object):
     
     def with_pyr_mean_shift_filter(self, sp=2, sr=12, maxLevel=2):
         self.img = cv2.pyrMeanShiftFiltering(self.img, sp, sr, maxLevel=2)
-        cv2.imshow("Mean shift filterd", self.img) 
+        #cv2.imshow("Mean shift filterd", self.img) 
         self.filteredImage = self.img.copy()
         return self
     
     def with_gaussian_blur(self, sigmaX, sigmaY, kernelSize=(5,5), borderType=0):
         self.img = cv2.GaussianBlur(self.img, kernelSize, borderType, sigmaX, sigmaY)
-        cv2.imshow("Gauss", self.img.copy())
+        #cv2.imshow("Gauss", self.img.copy())
         self.filteredImage = self.img.copy()
         #self.push_image()
         return self
     
     def with_bilateral_blur(self, d=15):
         self.img = cv2.bilateralFilter(self.img, 3, 64, 64)
-        cv2.imshow("bilatral blur", self.img.copy())
+        #cv2.imshow("bilatral blur", self.img.copy())
         return self
     
 
@@ -192,7 +194,7 @@ class CircleDetectorBuilder(object):
     def with_egde_preserving_filter(self, k=3, threshhold=127):
         self.img = cv2.ximgproc.edgePreservingFilter(self.img, k, threshhold)
         self.filteredImage = self.img
-        cv2.imshow("egde_perserving_filter", self.img)
+        #cv2.imshow("egde_perserving_filter", self.img)
         return self
     
     def with_erosion(self, kernelX=5, kernelY=5, iterations=1, borderType=cv2.BORDER_CONSTANT):
@@ -223,15 +225,15 @@ class CircleDetectorBuilder(object):
         #kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
         sure_bg = self.img
         
-        cv2.imshow('Before Transform.jpg', self.img)
+        #cv2.imshow('Before Transform.jpg', self.img)
         # Distance transform
         
         dist = cv2.distanceTransform(self.img, cv2.DIST_L2, 5)
-        cv2.imwrite('Distance Transform.jpg', dist)
+        #cv2.imwrite('Distance Transform.jpg', dist)
         
         
         dist2 = cv2.normalize(dist, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-        cv2.imwrite('Distance Transform Normalize.jpg', dist2)
+        #cv2.imwrite('Distance Transform Normalize.jpg', dist2)
         
         #foreground area
         dist2 = dist2.astype(np.uint8)
@@ -242,11 +244,11 @@ class CircleDetectorBuilder(object):
         #ret, sure_fg = cv2.threshold(dist2, 0, 255, cv2.THRESH_BINARY| cv2.THRESH_OTSU)
         
         sure_fg = self.img.astype(np.uint8)
-        cv2.imshow('Sure Foreground', sure_fg)
+        #cv2.imshow('Sure Foreground', sure_fg)
         
         # unknown area
         unknown = cv2.subtract(sure_bg, sure_fg)
-        cv2.imshow('Unknown', unknown)
+        #cv2.imshow('Unknown', unknown)
         
         # Marker labelling
         # sure foreground 
@@ -257,19 +259,19 @@ class CircleDetectorBuilder(object):
         # mark the region of unknown with zero
         markers[unknown == 255] = 0
         
-        fig, ax = plt.subplots(figsize=(6, 6))
-        ax.imshow(markers, cmap="gray")
-        ax.axis('off')
-        plt.show()
+        # fig, ax = plt.subplots(figsize=(6, 6))
+        # ax.imshow(markers, cmap="gray")
+        # ax.axis('off')
+        # plt.show()
         
         # watershed Algorithm
         markers = cv2.watershed(self.filteredImage, markers)
         
         
-        fig, ax = plt.subplots(figsize=(5, 5))
-        ax.imshow(markers, cmap="tab20b")
-        ax.axis('off')
-        plt.show()
+        # fig, ax = plt.subplots(figsize=(5, 5))
+        # ax.imshow(markers, cmap="tab20b")
+        # ax.axis('off')
+        # plt.show()
         
         labels = np.unique(markers)
         
@@ -290,10 +292,10 @@ class CircleDetectorBuilder(object):
         
         #img = cv2.drawContours(self.originalImage, tree, -1, color=(255, 255, 255), thickness=1)
         self.img = cv2.drawContours(self.originalImage.copy(), tree, -1, color=(255, 255, 255), thickness=cv2.FILLED)
-        cv2.imshow("Contours",self.img)
+        #cv2.imshow("Contours",self.img)
                 
         diff = cv2.subtract(cv2.cvtColor(self.img, cv2.COLOR_BGR2GRAY), cv2.cvtColor(self.originalImage, cv2.COLOR_BGR2GRAY))
-        cv2.imshow("Difference",diff)
+        #cv2.imshow("Difference",diff)
         self.img = diff
         
         return self
@@ -329,7 +331,7 @@ class CircleDetectorBuilder(object):
         # Create a detector with the parameters
         detector = cv2.SimpleBlobDetector_create(params)
 
-        cv2.imshow("before detection", self.img)
+        #cv2.imshow("before detection", self.img)
         
         # Detect blobs
         keypoints = detector.detect(self.img)
@@ -344,7 +346,7 @@ class CircleDetectorBuilder(object):
         blobs = cv2.drawKeypoints(self.originalImage, keypoints, blank, (209, 0, 255),
                                 cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
         
-        cv2.imshow("Keypoints", blobs)
+        #cv2.imshow("Keypoints", blobs)
         return self
 
     def with_detect_circles(self, method=cv2.HOUGH_GRADIENT, dp=1, minDist=10, param1=200, param2=100):
@@ -363,7 +365,7 @@ class CircleDetectorBuilder(object):
             self.show_images_with_offset_wrapper(offSetX, offSetY)
             cv2.waitKey(0)
             cv2.destroyAllWindows()
-            return
+            return self
     
         self.circles = np.uint16(np.around(self.circles))
         for i in self.circles[0,:]:
@@ -373,6 +375,7 @@ class CircleDetectorBuilder(object):
         self.show_images_with_offset_wrapper(offSetX, offSetY)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
+        return self
 
     def push_image(self):
         if self.showFlag:
@@ -514,10 +517,9 @@ def chooseFile() -> str:
         "Images Files", ["*.png", "*.jpg", "*.jpeg", "*.bmp"])])
     print(filename)
     return filename
-    
-    
+       
 def float_range(start: float, stop: float, increment: float) -> float:
-    while start < stop: # and not math.isclose(start, stop): Py>3.5
+    while start < stop:
         yield start
         start += increment
         
@@ -561,6 +563,46 @@ def compare_k_means(filename, K, C, blocksize):
         axs[i-start, 4].set_title('K-means Histogram K={}'.format(i))
         
     plt.show()
+    
+def get_all_filenames(dir: str) -> list:
+    # Specify the directory path where you want to list filenames
+    directory_path = dir
+
+    # Initialize an empty list to store filenames
+    file_list = []
+
+    # Use the os.listdir() function to get a list of filenames in the directory
+    try:
+        for filename in os.listdir(directory_path):
+            # Append the filename to the list
+            file_list.append(filename)
+    except OSError as e:
+        print(f"Error: {e}")
+    return file_list
+
+def elbow_method(data: list, filename: str):
+    inertias = []
+
+    for i in range(1,10):
+        kmeans = KMeans(n_clusters=i)
+        kmeans.fit(data)
+        inertias.append(kmeans.inertia_)
+
+    #plt.figure() # uncomment to 
+    plt.plot(range(1,10), inertias, marker='o')
+    plt.title('Elbow method')
+    plt.xlabel('Number of clusters')
+    plt.ylabel('Inertia')
+    plt.savefig("Elbow method_{}.png".format(filename.split('.')[0]))
+    
+def plot_blobs(blobs, title):
+    coord, label = zip(*blobs)  # Unzip the list of (x, y) coordinates
+    x, y = zip(*coord)
+    plt.scatter(x, y, marker='o', label=title)
+    plt.xlabel('X-axis')
+    plt.ylabel('Y-axis')
+    plt.title(title)
+    plt.legend()
 
 if __name__ == "__main__":
 
@@ -578,11 +620,11 @@ if __name__ == "__main__":
     # EdgeAwareFiltersList = int
     # """One of [DTF_NC, DTF_IC, DTF_RF, GUIDED_FILTER, AM_FILTER]"""
     
-    filename = chooseFile()
+    #filename = chooseFile()
+    
     # img = cv2.imread(filename)
     # img = cv2.resize(img, (480, 320))
     # img_filt = cv2.ximgproc.edgePreservingFilter(img, 5, 127)
-    
     # print("debug")
     
     
@@ -856,19 +898,79 @@ if __name__ == "__main__":
     # .show()
     
     #Important fast filtering
-    cb = CircleDetectorBuilder(filename, True, -15) \
-    .with_read_image() \
-    .with_resize_absolute(480, 320) \
-    .with_egde_preserving_filter(k=5) \
-    .with_pyr_mean_shift_filter(5,10, maxLevel=1) \
-    .with_hue_shift() \
-    .with_adaptive_threshold(67, 0) \
-    .with_watershed() \
-    .with_gaussian_blur(11, 11) \
-    .with_detect_blobs_MSER() \
-    .show()
     
-    # Post processing
+    path_to_dir = "/home/whoami/projects/python/hough-detect/perpendicular"
+    
+    files: list[str] = get_all_filenames(path_to_dir)
+    i = 0
+    for filename in files:
+        absolute_file_path = path_to_dir + '/' + filename
+        
+        cb = CircleDetectorBuilder(absolute_file_path, True, -15) \
+        .with_read_image() \
+        .with_resize_absolute(480, 320) \
+        .with_egde_preserving_filter(k=5) \
+        .with_pyr_mean_shift_filter(5,10, maxLevel=1) \
+        .with_grayscale() \
+        .with_adaptive_threshold(67, 0) \
+        .with_watershed() \
+        .with_gaussian_blur(11, 11) \
+        .with_detect_blobs_MSER() \
+        
+        # Post processing
+        points = cb.keypoints
+        pointSize = []
+        
+        for point in points:
+            pointSize.append((point.size, point.pt[0], point.pt[1]))
+        
+        mean = np.mean(np.asarray(pointSize[0]))
+        sigma = np.std(np.asarray(pointSize[0]))
+        
+        minimun = mean - sigma
+        maximum = mean + sigma
+        
+        print("Mean = {}".format(mean))
+        print("Standard Deviation = {}".format(sigma))
+        
+        for point in pointSize:
+            if point[0] < minimun or point[0] > maximum:
+                pointSize.remove(point)
+        
+        data = []
+        
+        for point in pointSize:
+            data.append((point[1], point[2]))
+
+        kmeans = KMeans(n_clusters=2)
+        kmeans.fit(data)
+        cluster_labels = kmeans.labels_
+        
+        # clustering = SpectralClustering(n_clusters=2,
+        # assign_labels='kmeans',
+        # random_state=0).fit(np.array(data))
+        
+        # cluster_labels = clustering.labels_
+        
+        labeled_data = zip(data, cluster_labels)
+        
+        labeled_data = list(labeled_data)
+        # Assuming you know some properties of the blobs in each cluster
+        cluster_0_blobs = [blob for i, blob in enumerate(labeled_data) if blob[1] == 0]
+        cluster_1_blobs = [blob for i, blob in enumerate(labeled_data) if blob[1] == 1]
+        
+        cv2.imshow("Image", cb.originalImage)
+        plot_blobs(cluster_0_blobs, "Cluster 0 Blobs")
+        plot_blobs(cluster_1_blobs, "Cluster 1 Blobs")
+        plt.show()
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
+
+    
+    # Prove assumtation that most Tree trunk size is normal distributed
+    
+    # draw the left over blobs
 
     #Important
     # cb = CircleDetectorBuilder(filename, True, 15) \
@@ -882,7 +984,6 @@ if __name__ == "__main__":
     # .with_gaussian_blur(11, 11) \
     # .with_detect_blobs_MSER() \
     # .show()
-
 
     # Background
     # cb = CircleDetectorBuilder(filename, True, -15) \
